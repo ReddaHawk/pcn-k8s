@@ -61,7 +61,7 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	msg := fmt.Sprintf("received reconcile request for %q (namespace: %q)", pod.GetName(), pod.GetNamespace())
+	msg := fmt.Sprintf("received reconcile request for Pod %q (namespace: %q)", pod.GetName(), pod.GetNamespace())
 	log.Log.Info(msg)
 	// is object marked for deletion?
 	if !pod.DeletionTimestamp.IsZero() {
@@ -85,6 +85,7 @@ func addPod(namespacedName string, pod *corev1.Pod) {
 		log.Log.Info("Pod already in the list: " + namespacedName)
 		return
 	}
+	// todo aggiungi rotte esistenti al lbrp
 
 	utils.Pods[namespacedName] = parsePod(pod)
 	log.Log.Info("Added pod in the list: " + namespacedName + "lenght "  + fmt.Sprintf("%d",len(utils.Pods)))
@@ -93,13 +94,15 @@ func addPod(namespacedName string, pod *corev1.Pod) {
 
 func parsePod(p *corev1.Pod) utils.Pod {
 	// UID is unique within the whole system
-	return utils.Pod{p.UID, p.Name,p.Status.PodIP}
+	return utils.Pod{p.UID, p.Name,p.Status.PodIP }
 }
 
 // todo complete
 func removePod(namespacedName string)  {
 
 	if _, ok := utils.Pods[namespacedName]; !ok {
+		log.Log.Info("Removing Pod: "+namespacedName)
+		delete(utils.Pods,namespacedName)
 		return
 	}
 

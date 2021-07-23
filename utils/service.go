@@ -12,8 +12,7 @@ type Pod struct {
 
 var (
 	Pods map[string]Pod
-	// all services that are active in the cluster
-	Services map[string]Service
+	Services map[types.UID]Service
 )
 
 type Backend struct {
@@ -21,8 +20,6 @@ type Backend struct {
 	Port int32
 }
 
-// TODO: are VIP and Vport good names?
-// What about IP and Port?
 type Service struct {
 	UID      types.UID
 	Name     string

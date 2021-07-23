@@ -61,16 +61,16 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	msg := fmt.Sprintf("received reconcile request for %q (namespace: %q)", endpoint.GetName(), endpoint.GetNamespace())
+	msg := fmt.Sprintf("received reconcile request for Endpoint %q (namespace: %q)", endpoint.GetName(), endpoint.GetNamespace())
 	log.Log.Info(msg)
 	// is object marked for deletion?
 	if !endpoint.DeletionTimestamp.IsZero() {
-		log.Log.Info("Pod marked for deletion")
+		log.Log.Info("Endpoint marked for deletion")
 		removeEndpoint(req.NamespacedName.String())
 		return ctrl.Result{}, nil
 	}
 
-	addEndpoint(req.NamespacedName.String(),endpoint)
+	addService(req.NamespacedName.String(),endpoint)
 	return ctrl.Result{}, nil
 }
 
@@ -78,13 +78,24 @@ func removeEndpoint(namespacedName string) {
 	
 }
 
-func addEndpoint(namespacedName string, endpoint *corev1.Endpoints) {
+func addService(namespacedName string, endpoint *corev1.Endpoints) {
 	if _, ok := utils.Services[namespacedName]; ok {
-
+		updateService(namespacedName, endpoint)
+		return
 	}
+	service, err := parseService(endpoint)
+	if err != nil {
+		return
+	}
+	utils.Services[service.UID] = service
+
 }
 
-func updateEndpoint() {
+func updateService(namespacedName string, endpoint *corev1.Endpoints) {
+
+}
+
+func parseService(endpoint *corev1.Endpoints) (utils.Service, error){
 
 }
 
