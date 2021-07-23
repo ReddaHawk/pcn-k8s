@@ -21,7 +21,6 @@ import (
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"polycube.com/utils"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -81,28 +80,28 @@ func (r *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 }
 
 func addPod(namespacedName string, pod *corev1.Pod) {
-	if _, ok := utils.Pods[namespacedName]; ok {
+	if _, ok := Pods[namespacedName]; ok {
 		log.Log.Info("Pod already in the list: " + namespacedName)
 		return
 	}
 	// todo aggiungi rotte esistenti al lbrp
 
-	utils.Pods[namespacedName] = parsePod(pod)
-	log.Log.Info("Added pod in the list: " + namespacedName + "lenght "  + fmt.Sprintf("%d",len(utils.Pods)))
+	Pods[namespacedName] = parsePod(pod)
+	log.Log.Info("Added pod in the list: " + namespacedName + "lenght "  + fmt.Sprintf("%d",len(Pods)))
 }
 
 
-func parsePod(p *corev1.Pod) utils.Pod {
+func parsePod(p *corev1.Pod) Pod {
 	// UID is unique within the whole system
-	return utils.Pod{p.UID, p.Name,p.Status.PodIP }
+	return Pod{p.UID, p.Name,p.Status.PodIP }
 }
 
 // todo complete
 func removePod(namespacedName string)  {
 
-	if _, ok := utils.Pods[namespacedName]; !ok {
+	if _, ok := Pods[namespacedName]; !ok {
 		log.Log.Info("Removing Pod: "+namespacedName)
-		delete(utils.Pods,namespacedName)
+		delete(Pods,namespacedName)
 		return
 	}
 

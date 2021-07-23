@@ -20,8 +20,6 @@ import (
 	"flag"
 	"os"
 
-	"polycube.com/utils"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	//_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -65,7 +63,7 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	utils.Pods = make(map[string]utils.Pod)
+	controllers.Pods = make(map[string]controllers.Pod)
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,

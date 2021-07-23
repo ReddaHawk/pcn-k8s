@@ -21,7 +21,7 @@ import (
 	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"polycube.com/utils"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -66,11 +66,11 @@ func (r *EndpointsReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// is object marked for deletion?
 	if !endpoint.DeletionTimestamp.IsZero() {
 		log.Log.Info("Endpoint marked for deletion")
-		removeEndpoint(req.NamespacedName.String())
+		//removeEndpoint(req.NamespacedName.String())
 		return ctrl.Result{}, nil
 	}
 
-	addService(req.NamespacedName.String(),endpoint)
+	r.addService(req.NamespacedName.String(),endpoint)
 	return ctrl.Result{}, nil
 }
 
@@ -78,26 +78,155 @@ func removeEndpoint(namespacedName string) {
 	
 }
 
-func addService(namespacedName string, endpoint *corev1.Endpoints) {
-	if _, ok := utils.Services[namespacedName]; ok {
+func (r* EndpointsReconciler) addService(namespacedName string, endpoint *corev1.Endpoints) {
+
+	if _, ok := Services[namespacedName]; ok {
 		updateService(namespacedName, endpoint)
 		return
 	}
-	service, err := parseService(endpoint)
+	service, err := r.parseService(endpoint)
 	if err != nil {
 		return
 	}
-	utils.Services[service.UID] = service
+	Services[namespacedName] = service
+	printService(service)
+	addNodeService(service)
 
 }
 
-func updateService(namespacedName string, endpoint *corev1.Endpoints) {
+func (r* EndpointsReconciler) updateService(namespacedName string, endpoint *corev1.Endpoints) {
+	if _, ok := Services[namespacedName]; !ok {
+		r.addService(namespacedName,endpoint)
+		return
+	}
+	log.Log.Info("Updating service "+endpoint.Name)
+	serviceOld := Services[namespacedName]
+	serviceNew, err := r.parseService(endpoint)
 
+	if err != nil {
+		return
+	}
+
+	// get list of added and removed ports
+	deletedPorts, addedPorts := getServicePortsDiff(serviceOld, serviceNew)
+	if len(deletedPorts) > 0 {
+		log.Debugf("ports deleted:")
+	}
+	for _, i := range deletedPorts {
+		log.Debugf("--%d:%s", i.Port, i.Proto)
+		delNodeServicePort(serviceNew, i)
+	}
+
+	if len(addedPorts) > 0 {
+		log.Debugf("ports added:")
+	}
+	for _, i := range addedPorts {
+		log.Debugf("--%d:%s", i.Port, i.Proto)
+		addNodeServicePort(serviceNew, i)
+	}
+
+	// for all ports, get list update backends
+	for portOldKey, portOldValue := range serviceOld.Ports {
+		portNewValue, ok := serviceNew.Ports[portOldKey]
+		if !ok {
+			continue
+		}
+		deletedBackends, addedBackends := getServicePortBackendsDiff(portOldValue, portNewValue)
+		if len(deletedBackends) > 0 {
+			log.Log.Info("addressed deleted:")
+		}
+		for _, i := range deletedBackends {
+			log.Log.Info(fmt.Sprintf("--%s:%d", i.IP, i.Port))
+			delNodeServicePortBackend(serviceNew, portOldValue, i)
+		}
+
+		if len(addedBackends) > 0 {
+			log.Log.Info("addressed added:")
+		}
+		for _, i := range addedBackends {
+			log.Log.Info(fmt.Sprintf("--%s:%d", i.IP, i.Port))
+			addNodeServicePortBackend(serviceNew, portOldValue, i)
+		}
+	}
+
+	services[uid] = serviceNew
 }
 
-func parseService(endpoint *corev1.Endpoints) (utils.Service, error){
 
+func (r* EndpointsReconciler) parseService(endpoint *corev1.Endpoints) (Service, error){
+	uid := endpoint.UID
+	name := endpoint.Name
+	namespace := endpoint.Namespace
+	serviceName := types.NamespacedName{Namespace: namespace,Name: name}
+	svc := &corev1.Service{}
+	if err := r.Client.Get(context.Background(), serviceName, svc); err != nil {
+		log.Log.Error(err,"Error getting svc ")
+		return Service{}, err
+	}
+	type_ := svc.Spec.Type
+	vip := svc.Spec.ClusterIP
+	externalTrafficPolicy := svc.Spec.ExternalTrafficPolicy
+
+	servicePorts := make(map[ServicePortKey]ServicePort)
+	// parse different ports
+	for _, port := range svc.Spec.Ports {
+		port_ := ServicePort{Name: port.Name,
+			Port:     port.Port,
+			Nodeport: port.NodePort,
+			Proto:    string(port.Protocol)}
+
+		port_.Backends = make(map[Backend]bool)
+
+		addresses := make(map[string]bool)
+		endpoindPorts := make(map[int32]bool)
+
+		// get endpoints that implement this port
+		for _, subset := range endpoint.Subsets {
+			// get IP addresses
+			for _, addr := range subset.Addresses {
+				addresses[addr.IP] = true
+			}
+
+			// get ports
+			for _, endpointPort := range subset.Ports {
+				if port.Name == "" || port.Name == endpointPort.Name {
+					endpoindPorts[endpointPort.Port] = true
+				}
+			}
+		}
+
+		// perform address x ports (cartesian product)
+		for address := range addresses {
+			for endpointPort := range endpoindPorts {
+				port_.Backends[Backend{address, endpointPort}] = true
+			}
+		}
+
+		servicePorts[ServicePortKey{port_.Port, port_.Proto}] = port_
+
+	}
+	return Service{UID: uid,
+		Name: name,
+		VIP: vip,
+		Type: string(type_),
+		ExternalTrafficPolicy: string(externalTrafficPolicy),
+		Ports: servicePorts,
+	} , nil
 }
+func printService(entry Service) {
+	log.Log.Info(fmt.Sprintf("uid: %s", entry.UID))
+	log.Log.Info(fmt.Sprintf("name: %s", entry.Name))
+	log.Log.Info(fmt.Sprintf("vip: %s", entry.VIP))
+	log.Log.Info(fmt.Sprintf("ports: "))
+	for _, y := range entry.Ports {
+		log.Log.Info(fmt.Sprintf("--%s, %d, %s, %d", y.Name, y.Port, y.Proto, y.Nodeport))
+		log.Log.Info(fmt.Sprintf("backends: "))
+		for x := range y.Backends {
+			log.Log.Info(fmt.Sprintf("--%s:%d", x.IP, x.Port))
+		}
+	}
+}
+
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *EndpointsReconciler) SetupWithManager(mgr ctrl.Manager) error {
