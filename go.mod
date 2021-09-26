@@ -1,4 +1,4 @@
-module polycube.com
+module github.com/polycube-network/polycube/src/components/k8s
 
 go 1.16
 

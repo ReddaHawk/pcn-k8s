@@ -25,6 +25,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"github.com/polycube-network/polycube/src/components/k8s/utils/lbrp"
+
 )
 
 // EndpointsReconciler reconciles a Endpoints object
@@ -110,18 +112,18 @@ func (r* EndpointsReconciler) updateService(namespacedName string, endpoint *cor
 	// get list of added and removed ports
 	deletedPorts, addedPorts := getServicePortsDiff(serviceOld, serviceNew)
 	if len(deletedPorts) > 0 {
-		log.Debugf("ports deleted:")
+		log.Log.Info("ports deleted:")
 	}
 	for _, i := range deletedPorts {
-		log.Debugf("--%d:%s", i.Port, i.Proto)
+		log.Log.Info(fmt.Sprintf("--%d:%s", i.Port, i.Proto))
 		delNodeServicePort(serviceNew, i)
 	}
 
 	if len(addedPorts) > 0 {
-		log.Debugf("ports added:")
+		log.Log.Info("ports added:")
 	}
 	for _, i := range addedPorts {
-		log.Debugf("--%d:%s", i.Port, i.Proto)
+		log.Log.Info(fmt.Sprintf("--%d:%s", i.Port, i.Proto))
 		addNodeServicePort(serviceNew, i)
 	}
 
@@ -150,6 +152,29 @@ func (r* EndpointsReconciler) updateService(namespacedName string, endpoint *cor
 	}
 
 	services[uid] = serviceNew
+}
+
+func delNodeServicePort(service Service, port ServicePort)  error {
+	/*
+	_, err := lbrp.DeleteK8switchServiceByID(ctx.background(),k8switchName, service.VIP,
+		port.Port, port.Proto)
+	if err != nil {
+		return err
+	}
+
+	if service.Type == "NodePort" {
+		if service.ExternalTrafficPolicy == "Local" {
+			return nil
+		}
+		_, err := k8switchAPI.DeleteK8switchServiceByID(k8switchName, nodeIP,
+			port.Nodeport, port.Proto)
+		if err != nil {
+			return err
+		}
+	}
+*/
+	return nil
+	
 }
 
 
